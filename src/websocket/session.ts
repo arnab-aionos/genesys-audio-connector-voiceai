@@ -1,4 +1,3 @@
-// websocket/session.ts - Enhanced version for UltraVox
 import { v4 as uuid } from "uuid";
 import { WebSocket } from "ws";
 import { JsonStringMap, MediaParameter } from "../protocol/core";
@@ -29,6 +28,9 @@ import {
   getMAXBinaryMessageSize,
   getMinBinaryMessageSize,
 } from "../common/environment-variables";
+
+import dotenv from "dotenv";
+dotenv.config();
 
 const BOT_PROVIDER = process.env.BOT_PROVIDER || "UltraVox";
 
