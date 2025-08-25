@@ -218,7 +218,7 @@ export class Server {
     const validKeys: string[] = [];
 
     // Primary API key for this server
-    const primaryApiKey = process.env.SERVER_API_KEY;
+    const primaryApiKey = process.env.SERVER_X_API_KEY;
     if (primaryApiKey) {
       validKeys.push(primaryApiKey);
     }
@@ -239,7 +239,7 @@ export class Server {
 
     if (validKeys.length === 0) {
       console.warn(
-        `${new Date().toISOString()}:[Server] WARNING: No API keys configured! Set SERVER_API_KEY environment variable.`
+        `${new Date().toISOString()}:[Server] WARNING: No API keys configured! Set SERVER_X_API_KEY environment variable.`
       );
     }
 
