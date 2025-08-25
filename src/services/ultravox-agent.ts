@@ -93,15 +93,21 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       todayDate
     );
 
-    // Use your exact working configuration
+    // FIXED: Use serverWebSocket instead of webRtc
     const callConfig = {
       systemPrompt: systemPrompt,
       model: ULTRAVOX_MODEL,
       voice: ULTRAVOX_VOICE,
       temperature: 0.3,
       firstSpeaker: "FIRST_SPEAKER_AGENT",
-      medium: { webRtc: {} },
-      selectedTools: [], // No tools for simplicity
+      medium: {
+        serverWebSocket: {
+          inputSampleRate: 8000, // Match Genesys PCMU rate
+          outputSampleRate: 8000, // Keep consistent
+          clientBufferSizeMs: 60, // Balance latency vs stability
+        },
+      },
+      selectedTools: [],
     };
 
     console.log(
@@ -131,19 +137,12 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
   private async connectWebSocket(joinUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Convert joinUrl to WebSocket URL if needed
-      let webSocketUrl = joinUrl;
-      if (webSocketUrl.startsWith("https://")) {
-        webSocketUrl = webSocketUrl.replace("https://", "wss://");
-      } else if (webSocketUrl.startsWith("http://")) {
-        webSocketUrl = webSocketUrl.replace("http://", "ws://");
-      }
-
       console.log(
-        `${new Date().toISOString()}:[UltraVox] Connecting to: ${webSocketUrl}`
+        `${new Date().toISOString()}:[UltraVox] Connecting to: ${joinUrl}`
       );
 
-      this.ultraVoxWs = new WebSocket(webSocketUrl);
+      // FIXED: Use joinUrl directly for serverWebSocket (no protocol conversion needed)
+      this.ultraVoxWs = new WebSocket(joinUrl);
 
       const timeout = setTimeout(() => {
         reject(new Error("WebSocket connection timeout"));
@@ -182,13 +181,16 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   private handleUltraVoxMessage(data: any): void {
     try {
       if (Buffer.isBuffer(data)) {
-        // Audio data from UltraVox
+        // Audio data from UltraVox (PCM format)
         console.log(
           `${new Date().toISOString()}:[UltraVox] Audio received: ${
             data.length
           } bytes`
         );
-        this.session.sendAudio(new Uint8Array(data));
+
+        // FIXED: Convert PCM back to PCMU for Genesys
+        const pcmuAudio = this.convertPCMToPCMU(new Uint8Array(data));
+        this.session.sendAudio(pcmuAudio);
         return;
       }
 
@@ -275,11 +277,81 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     }
   }
 
-  // Abstract method implementations
+  // FIXED: Add audio format conversion methods
+  private convertPCMUToPCM(pcmuData: Uint8Array): Uint8Array {
+    // Convert μ-law (PCMU) to linear PCM (s16le)
+    const pcmData = new Int16Array(pcmuData.length);
+
+    for (let i = 0; i < pcmuData.length; i++) {
+      pcmData[i] = this.ulawToPcm(pcmuData[i]);
+    }
+
+    return new Uint8Array(pcmData.buffer);
+  }
+
+  private convertPCMToPCMU(pcmData: Uint8Array): Uint8Array {
+    // Convert linear PCM (s16le) back to μ-law (PCMU)
+    const int16Array = new Int16Array(pcmData.buffer);
+    const pcmuData = new Uint8Array(int16Array.length);
+
+    for (let i = 0; i < int16Array.length; i++) {
+      pcmuData[i] = this.pcmToUlaw(int16Array[i]);
+    }
+
+    return pcmuData;
+  }
+
+  // μ-law to linear PCM conversion
+  private ulawToPcm(ulaw: number): number {
+    const BIAS = 0x84;
+    const CLIP = 8159;
+
+    ulaw = ~ulaw;
+    const sign = ulaw & 0x80;
+    const exponent = (ulaw >> 4) & 0x07;
+    const mantissa = ulaw & 0x0f;
+
+    let sample = mantissa << (exponent + 3);
+    sample += BIAS;
+    if (exponent !== 0) {
+      sample += 1 << (exponent + 2);
+    }
+
+    return sign !== 0 ? -sample : sample;
+  }
+
+  // Linear PCM to μ-law conversion
+  private pcmToUlaw(pcm: number): number {
+    const BIAS = 0x84;
+    const CLIP = 8159;
+
+    if (pcm < 0) {
+      pcm = BIAS - pcm;
+    } else {
+      pcm = BIAS + pcm;
+    }
+
+    if (pcm > CLIP) pcm = CLIP;
+
+    let exponent = 7;
+    let expMask = 0x4000;
+    while ((pcm & expMask) === 0 && exponent > 0) {
+      exponent--;
+      expMask >>= 1;
+    }
+
+    const mantissa = (pcm >> (exponent + 3)) & 0x0f;
+    const ulaw = ~((exponent << 4) | mantissa);
+
+    return ulaw & 0xff;
+  }
+
+  // FIXED: Convert incoming PCMU to PCM before sending to UltraVox
   async processAudio(audioPayload: Uint8Array): Promise<void> {
     if (this.isAgentConnected()) {
-      // Send raw audio to UltraVox
-      this.ultraVoxWs?.send(audioPayload);
+      // Convert PCMU to PCM before sending to UltraVox
+      const pcmAudio = this.convertPCMUToPCM(audioPayload);
+      this.ultraVoxWs?.send(pcmAudio);
     }
   }
 

@@ -11,7 +11,7 @@ export class Server {
   private wsServer: any;
   private sessionMap: Map<WebSocket, Session> = new Map();
   private secretService = new SecretService();
-  private readonly enableKeyVerification = false; // Set to true for production
+  private readonly enableKeyVerification = true; // ENABLED for production
 
   start() {
     console.log(
@@ -24,7 +24,7 @@ export class Server {
       noServer: true,
     });
 
-    // Health check endpoint
+    // Health check endpoint (no auth required)
     this.app.get("/health", (_req, res) => {
       console.log(
         `${new Date().toISOString()}:[Server] Health check requested`
@@ -34,6 +34,34 @@ export class Server {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         activeConnections: this.sessionMap.size,
+        endpoint: "wss://your-domain.com/",
+        authRequired: "X-API-KEY header",
+        note: "This server requires X-API-KEY header for all WebSocket and API access",
+      });
+    });
+
+    // Test endpoint with API key validation
+    this.app.post("/test", (req, res) => {
+      const apiKey = req.headers["x-api-key"] as string;
+
+      if (!this.validateApiKey(apiKey)) {
+        console.log(
+          `${new Date().toISOString()}:[Server] Invalid API key in test endpoint`
+        );
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Invalid or missing X-API-KEY header",
+        });
+      }
+
+      console.log(
+        `${new Date().toISOString()}:[Server] Test endpoint called with valid API key`
+      );
+
+      res.status(200).json({
+        message: "Authentication successful",
+        timestamp: new Date().toISOString(),
+        apiKeyValid: true,
       });
     });
 
@@ -42,11 +70,24 @@ export class Server {
       "upgrade",
       (request: Request, socket: any, head: any) => {
         console.log(
-          `${new Date().toISOString()}:[Server] Connection request from ${
+          `${new Date().toISOString()}:[Server] WebSocket upgrade request from ${
             request.url
           }`
         );
 
+        // Check X-API-KEY header for WebSocket connections
+        const apiKey = request.headers["x-api-key"] as string;
+
+        if (this.enableKeyVerification && !this.validateApiKey(apiKey)) {
+          console.log(
+            `${new Date().toISOString()}:[Server] WebSocket authentication failed - invalid API key`
+          );
+          socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+          socket.destroy();
+          return;
+        }
+
+        // Also verify Genesys signature if available
         verifyRequestSignature(request, this.secretService).then(
           (verifyResult) => {
             if (
@@ -54,7 +95,7 @@ export class Server {
               this.enableKeyVerification
             ) {
               console.log(
-                `${new Date().toISOString()}:[Server] Authentication failed`
+                `${new Date().toISOString()}:[Server] Genesys signature verification failed`
               );
               socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
               socket.destroy();
@@ -67,7 +108,7 @@ export class Server {
               head,
               (ws: WebSocket) => {
                 console.log(
-                  `${new Date().toISOString()}:[Server] Authentication successful`
+                  `${new Date().toISOString()}:[Server] Authentication successful - WebSocket connected`
                 );
                 this.wsServer.emit("connection", ws, request);
               }
@@ -80,7 +121,7 @@ export class Server {
     // Handle new WebSocket connections
     this.wsServer.on("connection", (ws: WebSocket, request: Request) => {
       console.log(
-        `${new Date().toISOString()}:[Server] New WebSocket connection`
+        `${new Date().toISOString()}:[Server] New WebSocket connection established`
       );
 
       ws.on("close", () => {
@@ -134,6 +175,75 @@ export class Server {
     console.log(
       `${new Date().toISOString()}:[Server] Server started successfully`
     );
+    console.log(
+      `${new Date().toISOString()}:[Server] Genesys WebSocket endpoint: wss://your-domain.com/`
+    );
+    console.log(
+      `${new Date().toISOString()}:[Server] Required header: X-API-KEY`
+    );
+  }
+
+  private validateApiKey(apiKey: string): boolean {
+    if (!apiKey) {
+      console.log(
+        `${new Date().toISOString()}:[Server] Missing X-API-KEY header`
+      );
+      return false;
+    }
+
+    // Get valid API keys from environment or secret service
+    const validApiKeys = this.getValidApiKeys();
+
+    if (!validApiKeys.includes(apiKey)) {
+      console.log(
+        `${new Date().toISOString()}:[Server] Invalid API key: ${apiKey.substring(
+          0,
+          8
+        )}...`
+      );
+      return false;
+    }
+
+    console.log(
+      `${new Date().toISOString()}:[Server] Valid API key: ${apiKey.substring(
+        0,
+        8
+      )}...`
+    );
+    return true;
+  }
+
+  private getValidApiKeys(): string[] {
+    // Get API keys from environment variables only (no hardcoding)
+    const validKeys: string[] = [];
+
+    // Primary API key for this server
+    const primaryApiKey = process.env.SERVER_X_API_KEY;
+    if (primaryApiKey) {
+      validKeys.push(primaryApiKey);
+    }
+
+    // Support for multiple API keys (comma-separated)
+    const additionalKeys = process.env.ADDITIONAL_API_KEYS;
+    if (additionalKeys) {
+      const keys = additionalKeys.split(",").map((key) => key.trim());
+      validKeys.push(...keys);
+    }
+
+    // Log how many keys are loaded (without exposing them)
+    console.log(
+      `${new Date().toISOString()}:[Server] Loaded ${
+        validKeys.length
+      } valid API key(s) from environment`
+    );
+
+    if (validKeys.length === 0) {
+      console.warn(
+        `${new Date().toISOString()}:[Server] WARNING: No API keys configured! Set SERVER_X_API_KEY environment variable.`
+      );
+    }
+
+    return validKeys.filter((key) => key && key.length > 10);
   }
 
   private createConnection(ws: WebSocket, request: Request) {
