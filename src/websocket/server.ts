@@ -5,6 +5,11 @@ import { Session } from "./session";
 import { getPort } from "../common/environment-variables";
 import { SecretService } from "../services/secret-service";
 
+console.log("=== SERVER STARTUP ===");
+console.log("Time:", new Date().toISOString());
+console.log("Process PID:", process.pid);
+console.log("=====================");
+
 export class Server {
   private app: Express | undefined;
   private httpServer: any;
@@ -17,14 +22,35 @@ export class Server {
     process.env.ENABLE_SIGNATURE_VERIFICATION !== "false";
 
   start() {
+    console.log(`${new Date().toISOString()}:[Server] CREATING EXPRESS APP`);
+    this.app = express();
+
+    console.log(`${new Date().toISOString()}:[Server] CREATING HTTP SERVER`);
+    this.httpServer = this.app.listen(getPort(), "0.0.0.0", () => {
+      console.log(
+        `${new Date().toISOString()}:[Server] HTTP SERVER LISTENING ON PORT ${getPort()}`
+      );
+    });
+
     console.log(
-      `${new Date().toISOString()}:[Server] Starting server on port: ${getPort()}`
+      `${new Date().toISOString()}:[Server] CREATING WEBSOCKET SERVER`
     );
 
     this.app = express();
     this.httpServer = this.app.listen(getPort(), "0.0.0.0");
     this.wsServer = new WebSocket.Server({
       noServer: true,
+    });
+
+    this.app.use((req, res, next) => {
+      console.log("=== HTTP REQUEST ===");
+      console.log("Time:", new Date().toISOString());
+      console.log("Method:", req.method);
+      console.log("URL:", req.url);
+      console.log("Headers:", JSON.stringify(req.headers, null, 2));
+      console.log("IP:", req.ip);
+      console.log("==================");
+      next();
     });
 
     // Health check endpoint (no auth required)
@@ -75,10 +101,13 @@ export class Server {
         console.log("=== WEBSOCKET UPGRADE REQUEST ===");
         console.log("Time:", new Date().toISOString());
         console.log("URL:", request.url);
-        console.log("Origin:", request.headers.origin);
-        console.log("User-Agent:", request.headers["user-agent"]);
+        console.log("Method:", request.method);
+        console.log("HTTP Version:", request.httpVersion);
+        console.log("Remote Address:", socket.remoteAddress);
+        console.log("Remote Port:", socket.remotePort);
+        console.log("Local Address:", socket.localAddress);
+        console.log("Local Port:", socket.localPort);
         console.log("All Headers:", JSON.stringify(request.headers, null, 2));
-        console.log("================================");
 
         // Check X-API-KEY header OR query parameter (for browser testing)
         let apiKey = request.headers["x-api-key"] as string;
@@ -140,6 +169,15 @@ export class Server {
           }
           this.handleWebSocketUpgrade(request, socket, head);
         }
+
+        console.log(
+          "Genesys Headers:",
+          JSON.stringify(request.headers, null, 2)
+        );
+
+        console.log("Socket Ready State:", socket.readyState);
+        console.log("Socket Destroyed:", socket.destroyed);
+        console.log("================================");
       }
     );
 
