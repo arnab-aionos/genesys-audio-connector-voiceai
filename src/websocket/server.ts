@@ -72,11 +72,13 @@ export class Server {
     this.httpServer.on(
       "upgrade",
       (request: Request, socket: any, head: any) => {
-        console.log(
-          `${new Date().toISOString()}:[Server] WebSocket upgrade request from ${
-            request.url
-          }`
-        );
+        console.log("=== WEBSOCKET UPGRADE REQUEST ===");
+        console.log("Time:", new Date().toISOString());
+        console.log("URL:", request.url);
+        console.log("Origin:", request.headers.origin);
+        console.log("User-Agent:", request.headers["user-agent"]);
+        console.log("All Headers:", JSON.stringify(request.headers, null, 2));
+        console.log("================================");
 
         // Check X-API-KEY header OR query parameter (for browser testing)
         let apiKey = request.headers["x-api-key"] as string;
