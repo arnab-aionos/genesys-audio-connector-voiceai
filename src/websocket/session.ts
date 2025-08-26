@@ -29,9 +29,6 @@ import {
   getMinBinaryMessageSize,
 } from "../common/environment-variables";
 
-import dotenv from "dotenv";
-dotenv.config();
-
 const BOT_PROVIDER = process.env.BOT_PROVIDER || "UltraVox";
 
 export class Session {

@@ -1,6 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 const DEFAULT_PORT = 8080;
 
 export function getPort(): number {

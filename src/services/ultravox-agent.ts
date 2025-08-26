@@ -4,9 +4,6 @@ import { Session } from "../websocket/session";
 import { VoiceAIAgentBaseClass } from "./voice-aiagent-base";
 import { getNoInputTimeout } from "../common/environment-variables";
 
-import dotenv from "dotenv";
-dotenv.config();
-
 // UltraVox Configuration
 const ULTRAVOX_API_KEY = process.env.ULTRAVOX_API_KEY || "";
 const ULTRAVOX_CALL_API =

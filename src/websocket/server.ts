@@ -4,8 +4,7 @@ import { verifyRequestSignature } from "../auth/authenticator";
 import { Session } from "./session";
 import { getPort } from "../common/environment-variables";
 import { SecretService } from "../services/secret-service";
-import dotenv from "dotenv";
-dotenv.config();
+
 export class Server {
   private app: Express | undefined;
   private httpServer: any;

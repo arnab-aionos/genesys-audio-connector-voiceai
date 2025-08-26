@@ -1,8 +1,6 @@
 import { error } from "console";
 import { Session } from "../websocket/session";
 import { Timer } from "./timer";
-import dotenv from "dotenv";
-dotenv.config();
 
 /**
  * Base class for all voice AI agents, providing common session and timeout handling.
