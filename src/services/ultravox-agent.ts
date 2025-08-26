@@ -287,8 +287,18 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   }
 
   private convertPCMToPCMU(pcmData: Uint8Array): Uint8Array {
-    // Convert linear PCM (s16le) back to μ-law (PCMU)
-    const int16Array = new Int16Array(pcmData.buffer);
+    // Ensure even byte length for Int16Array
+    const evenLength = pcmData.length - (pcmData.length % 2);
+    if (evenLength === 0) {
+      return new Uint8Array(0); // Return empty if no valid data
+    }
+
+    const validPcmData = pcmData.slice(0, evenLength);
+    const int16Array = new Int16Array(
+      validPcmData.buffer,
+      validPcmData.byteOffset,
+      evenLength / 2
+    );
     const pcmuData = new Uint8Array(int16Array.length);
 
     for (let i = 0; i < int16Array.length; i++) {

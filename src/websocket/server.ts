@@ -11,7 +11,10 @@ export class Server {
   private wsServer: any;
   private sessionMap: Map<WebSocket, Session> = new Map();
   private secretService = new SecretService();
-  private readonly enableKeyVerification = true; // ENABLED for production
+  private readonly enableKeyVerification =
+    process.env.ENABLE_KEY_VERIFICATION !== "false";
+  private readonly enableSignatureVerification =
+    process.env.ENABLE_SIGNATURE_VERIFICATION !== "false";
 
   start() {
     console.log(
@@ -34,9 +37,9 @@ export class Server {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         activeConnections: this.sessionMap.size,
-        endpoint: "wss://your-domain.com/",
-        authRequired: "X-API-KEY header",
-        note: "This server requires X-API-KEY header for all WebSocket and API access",
+        endpoint: "ws://localhost:3000/",
+        authRequired: "X-API-KEY header or apikey query parameter",
+        signatureVerification: this.enableSignatureVerification,
       });
     });
 
@@ -75,8 +78,14 @@ export class Server {
           }`
         );
 
-        // Check X-API-KEY header for WebSocket connections
-        const apiKey = request.headers["x-api-key"] as string;
+        // Check X-API-KEY header OR query parameter (for browser testing)
+        let apiKey = request.headers["x-api-key"] as string;
+
+        // If no header, check query parameter for browser testing
+        if (!apiKey && request.url) {
+          const url = new URL(request.url, `http://${request.headers.host}`);
+          apiKey = url.searchParams.get("apikey") || "";
+        }
 
         if (this.enableKeyVerification && !this.validateApiKey(apiKey)) {
           console.log(
@@ -87,34 +96,48 @@ export class Server {
           return;
         }
 
-        // Also verify Genesys signature if available
-        verifyRequestSignature(request, this.secretService).then(
-          (verifyResult) => {
-            if (
-              verifyResult.code !== "VERIFIED" &&
-              this.enableKeyVerification
-            ) {
-              console.log(
-                `${new Date().toISOString()}:[Server] Genesys signature verification failed`
-              );
-              socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
-              socket.destroy();
-              return;
-            }
+        // Check if this is a Genesys request (has required audiohook headers)
+        const hasGenesysHeaders =
+          request.headers["audiohook-session-id"] ||
+          request.headers["audiohook-organization-id"] ||
+          request.headers["audiohook-correlation-id"];
 
-            this.wsServer.handleUpgrade(
-              request,
-              socket,
-              head,
-              (ws: WebSocket) => {
+        if (hasGenesysHeaders && this.enableSignatureVerification) {
+          // This is a Genesys connection - verify signature
+          console.log(
+            `${new Date().toISOString()}:[Server] Genesys headers detected - verifying signature`
+          );
+          verifyRequestSignature(request, this.secretService).then(
+            (verifyResult) => {
+              if (verifyResult.code !== "VERIFIED") {
                 console.log(
-                  `${new Date().toISOString()}:[Server] Authentication successful - WebSocket connected`
+                  `${new Date().toISOString()}:[Server] Genesys signature verification failed: ${
+                    verifyResult.code
+                  }`
                 );
-                this.wsServer.emit("connection", ws, request);
+                socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+                socket.destroy();
+                return;
               }
+              console.log(
+                `${new Date().toISOString()}:[Server] Genesys signature verified successfully`
+              );
+              this.handleWebSocketUpgrade(request, socket, head);
+            }
+          );
+        } else {
+          // This is a test/browser connection or signature verification is disabled
+          if (!hasGenesysHeaders) {
+            console.log(
+              `${new Date().toISOString()}:[Server] Test connection detected - no Genesys headers found`
+            );
+          } else {
+            console.log(
+              `${new Date().toISOString()}:[Server] Signature verification disabled via environment`
             );
           }
-        );
+          this.handleWebSocketUpgrade(request, socket, head);
+        }
       }
     );
 
@@ -125,13 +148,11 @@ export class Server {
       );
 
       ws.on("close", () => {
-        const session = this.sessionMap.get(ws);
         console.log(`${new Date().toISOString()}:[Server] WebSocket closed`);
         this.deleteConnection(ws);
       });
 
       ws.on("error", (error: Error) => {
-        const session = this.sessionMap.get(ws);
         console.log(
           `${new Date().toISOString()}:[Server] WebSocket error: ${
             error.message
@@ -176,25 +197,45 @@ export class Server {
       `${new Date().toISOString()}:[Server] Server started successfully`
     );
     console.log(
-      `${new Date().toISOString()}:[Server] Genesys WebSocket endpoint: wss://your-domain.com/`
+      `${new Date().toISOString()}:[Server] WebSocket endpoint: ws://localhost:${getPort()}/`
     );
     console.log(
-      `${new Date().toISOString()}:[Server] Required header: X-API-KEY`
+      `${new Date().toISOString()}:[Server] API Key verification: ${
+        this.enableKeyVerification
+      }`
     );
+    console.log(
+      `${new Date().toISOString()}:[Server] Signature verification: ${
+        this.enableSignatureVerification
+      }`
+    );
+  }
+
+  private handleWebSocketUpgrade(request: Request, socket: any, head: any) {
+    this.wsServer.handleUpgrade(request, socket, head, (ws: WebSocket) => {
+      console.log(
+        `${new Date().toISOString()}:[Server] Authentication successful - WebSocket connected`
+      );
+      this.wsServer.emit("connection", ws, request);
+    });
   }
 
   private validateApiKey(apiKey: string): boolean {
     if (!apiKey) {
-      console.log(
-        `${new Date().toISOString()}:[Server] Missing X-API-KEY header`
+      console.log(`${new Date().toISOString()}:[Server] Missing API key`);
+      return false;
+    }
+
+    const validApiKey = process.env.SERVER_X_API_KEY;
+
+    if (!validApiKey) {
+      console.warn(
+        `${new Date().toISOString()}:[Server] WARNING: SERVER_X_API_KEY not configured!`
       );
       return false;
     }
 
-    // Get valid API keys from environment or secret service
-    const validApiKeys = this.getValidApiKeys();
-
-    if (!validApiKeys.includes(apiKey)) {
+    if (apiKey !== validApiKey) {
       console.log(
         `${new Date().toISOString()}:[Server] Invalid API key: ${apiKey.substring(
           0,
@@ -211,39 +252,6 @@ export class Server {
       )}...`
     );
     return true;
-  }
-
-  private getValidApiKeys(): string[] {
-    // Get API keys from environment variables only (no hardcoding)
-    const validKeys: string[] = [];
-
-    // Primary API key for this server
-    const primaryApiKey = process.env.SERVER_X_API_KEY;
-    if (primaryApiKey) {
-      validKeys.push(primaryApiKey);
-    }
-
-    // Support for multiple API keys (comma-separated)
-    const additionalKeys = process.env.ADDITIONAL_API_KEYS;
-    if (additionalKeys) {
-      const keys = additionalKeys.split(",").map((key) => key.trim());
-      validKeys.push(...keys);
-    }
-
-    // Log how many keys are loaded (without exposing them)
-    console.log(
-      `${new Date().toISOString()}:[Server] Loaded ${
-        validKeys.length
-      } valid API key(s) from environment`
-    );
-
-    if (validKeys.length === 0) {
-      console.warn(
-        `${new Date().toISOString()}:[Server] WARNING: No API keys configured! Set SERVER_X_API_KEY environment variable.`
-      );
-    }
-
-    return validKeys.filter((key) => key && key.length > 10);
   }
 
   private createConnection(ws: WebSocket, request: Request) {
