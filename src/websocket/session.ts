@@ -54,16 +54,28 @@ export class Session {
   private isAudioPlaying = false;
   private buffer: Array<Uint8Array> = new Array<Uint8Array>();
 
-  constructor(ws: WebSocket, sessionId: string, url: string) {
+  constructor(
+    ws: WebSocket,
+    sessionId: string | undefined,
+    url: string | undefined
+  ) {
     this.ws = ws;
-    this.clientSessionId = sessionId;
-    this.url = url;
+    this.clientSessionId = sessionId || this.generateSessionId();
+    this.url = url || "";
 
-    console.log(
-      `${new Date().toISOString()}:[Session] Created session: ${
-        this.clientSessionId
-      }`
-    );
+    if (!sessionId) {
+      console.warn(
+        `${new Date().toISOString()}:[Session] No session ID provided - generated: ${
+          this.clientSessionId
+        }`
+      );
+    } else {
+      console.log(
+        `${new Date().toISOString()}:[Session] Created session: ${
+          this.clientSessionId
+        }`
+      );
+    }
 
     // Initialize Voice AI Agent
     try {
@@ -76,7 +88,14 @@ export class Session {
         `${new Date().toISOString()}:[Session] Failed to initialize Voice AI Agent:`,
         error
       );
+      // Don't fail the session, continue without agent for testing
     }
+  }
+
+  private generateSessionId(): string {
+    return `test-session-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
   }
 
   // Getters for agent access
@@ -178,37 +197,59 @@ export class Session {
         }`
       );
 
-      // Validate sequence numbers
-      if (message.seq !== this.lastClientSequenceNumber + 1) {
-        console.log(
-          `${new Date().toISOString()}:[Session] Invalid client sequence: ${
-            message.seq
-          }`
-        );
-        this.sendDisconnect("error", "Invalid client sequence number.", {});
+      // FIXED: Handle test messages more gracefully
+      if (this.isTestConnection(message)) {
+        this.handleTestMessage(message);
         return;
       }
 
-      this.lastClientSequenceNumber = message.seq;
+      // Validate sequence numbers for production Genesys messages
+      if (
+        message.seq !== undefined &&
+        message.seq !== this.lastClientSequenceNumber + 1
+      ) {
+        console.warn(
+          `${new Date().toISOString()}:[Session] Invalid client sequence: expected ${
+            this.lastClientSequenceNumber + 1
+          }, got ${message.seq}`
+        );
+        // For test connections, warn but continue; for production, disconnect
+        if (this.isProductionConnection()) {
+          this.sendDisconnect("error", "Invalid client sequence number.", {});
+          return;
+        }
+      }
 
-      if (message.serverseq > this.lastServerSequenceNumber) {
-        console.log(
+      if (message.seq !== undefined) {
+        this.lastClientSequenceNumber = message.seq;
+      }
+
+      if (
+        message.serverseq !== undefined &&
+        message.serverseq > this.lastServerSequenceNumber
+      ) {
+        console.warn(
           `${new Date().toISOString()}:[Session] Invalid server sequence: ${
             message.serverseq
           }`
         );
-        this.sendDisconnect("error", "Invalid server sequence number.", {});
-        return;
+        if (this.isProductionConnection()) {
+          this.sendDisconnect("error", "Invalid server sequence number.", {});
+          return;
+        }
       }
 
-      if (message.id !== this.clientSessionId) {
-        console.log(
-          `${new Date().toISOString()}:[Session] Invalid session ID: ${
-            message.id
-          }`
+      // FIXED: More flexible ID validation
+      if (message.id && message.id !== this.clientSessionId) {
+        console.warn(
+          `${new Date().toISOString()}:[Session] Session ID mismatch: expected ${
+            this.clientSessionId
+          }, got ${message.id}`
         );
-        this.sendDisconnect("error", "Invalid ID specified.", {});
-        return;
+        if (this.isProductionConnection()) {
+          this.sendDisconnect("error", "Invalid ID specified.", {});
+          return;
+        }
       }
 
       const handler = this.messageHandlerRegistry.getHandler(message.type);
@@ -227,7 +268,47 @@ export class Session {
         `${new Date().toISOString()}:[Session] Error processing text message:`,
         error
       );
-      this.sendDisconnect("error", "Message processing error", {});
+      if (this.isProductionConnection()) {
+        this.sendDisconnect("error", "Message processing error", {});
+      }
+    }
+  }
+
+  private isTestConnection(message: any): boolean {
+    // Test connections typically send simple ping messages without proper protocol structure
+    return (
+      message.type === "ping" &&
+      (message.seq === undefined ||
+        message.id === undefined ||
+        message.serverseq === undefined)
+    );
+  }
+
+  private isProductionConnection(): boolean {
+    // Production connections have audiohook headers
+    return this.url.includes("audiohook") || this.conversationId !== undefined;
+  }
+
+  private handleTestMessage(message: any) {
+    console.log(
+      `${new Date().toISOString()}:[Session] Handling test message: ${
+        message.type
+      }`
+    );
+
+    if (message.type === "ping") {
+      // Send a simple test response
+      const testResponse = {
+        type: "pong",
+        timestamp: new Date().toISOString(),
+        status: "ok",
+      };
+
+      console.log(
+        `${new Date().toISOString()}:[Session] Sending test pong response`
+      );
+
+      this.ws.send(JSON.stringify(testResponse));
     }
   }
 
@@ -460,7 +541,26 @@ export class Session {
     this.voiceAIAgentClient?.sendKeepAlive();
   }
 
-  // Audio processing - main entry point for Genesys audio
+  // Handle UltraVox audio responses (OUTBOUND to Genesys)
+  sendAudioFromAgent(audioData: Uint8Array) {
+    if (this.closed) {
+      console.log(
+        `${new Date().toISOString()}:[Session] Cannot send agent audio - session closed`
+      );
+      return;
+    }
+
+    console.log(
+      `${new Date().toISOString()}:[Session] Received AGENT audio from UltraVox: ${
+        audioData.length
+      } bytes -> sending to Genesys customer`
+    );
+
+    // Use existing sendAudio method for buffering/chunking
+    this.sendAudio(audioData);
+  }
+
+  // Clarify this processes customer audio TO UltraVox
   processBinaryMessage(data: Uint8Array) {
     if (this.disconnecting || this.closed) {
       console.log(
@@ -477,12 +577,12 @@ export class Session {
     }
 
     console.log(
-      `${new Date().toISOString()}:[Session] Processing audio: ${
+      `${new Date().toISOString()}:[Session] Processing CUSTOMER audio from Genesys: ${
         data.length
-      } bytes`
+      } bytes -> sending to UltraVox`
     );
 
-    // Send directly to Voice AI Agent (UltraVox)
+    // Send customer audio TO UltraVox agent
     this.voiceAIAgentClient?.processAudio(data);
   }
 
