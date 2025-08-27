@@ -25,23 +25,7 @@ export class Server {
     console.log(`${new Date().toISOString()}:[Server] CREATING EXPRESS APP`);
     this.app = express();
 
-    console.log(`${new Date().toISOString()}:[Server] CREATING HTTP SERVER`);
-    this.httpServer = this.app.listen(getPort(), "0.0.0.0", () => {
-      console.log(
-        `${new Date().toISOString()}:[Server] HTTP SERVER LISTENING ON PORT ${getPort()}`
-      );
-    });
-
-    console.log(
-      `${new Date().toISOString()}:[Server] CREATING WEBSOCKET SERVER`
-    );
-
-    this.app = express();
-    this.httpServer = this.app.listen(getPort(), "0.0.0.0");
-    this.wsServer = new WebSocket.Server({
-      noServer: true,
-    });
-
+    // Add middleware and routes BEFORE creating the server
     this.app.use((req, res, next) => {
       console.log("=== HTTP REQUEST ===");
       console.log("Time:", new Date().toISOString());
@@ -63,7 +47,7 @@ export class Server {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         activeConnections: this.sessionMap.size,
-        endpoint: "ws://localhost:3000/",
+        endpoint: `ws://localhost:${getPort()}/`,
         authRequired: "X-API-KEY header or apikey query parameter",
         signatureVerification: this.enableSignatureVerification,
       });
@@ -92,6 +76,23 @@ export class Server {
         timestamp: new Date().toISOString(),
         apiKeyValid: true,
       });
+    });
+
+    console.log(`${new Date().toISOString()}:[Server] CREATING HTTP SERVER`);
+    // Create HTTP server ONLY ONCE
+    this.httpServer = this.app.listen(getPort(), "0.0.0.0", () => {
+      console.log(
+        `${new Date().toISOString()}:[Server] HTTP SERVER LISTENING ON PORT ${getPort()}`
+      );
+    });
+
+    console.log(
+      `${new Date().toISOString()}:[Server] CREATING WEBSOCKET SERVER`
+    );
+
+    // Create WebSocket server using the existing HTTP server
+    this.wsServer = new WebSocket.Server({
+      noServer: true,
     });
 
     // Handle WebSocket upgrade requests
