@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import fetch from "node-fetch";
 import { Session } from "../websocket/session";
 import { VoiceAIAgentBaseClass } from "./voice-aiagent-base";
-import { getNoInputTimeout } from "../common/environment-variables";
+import { getNoInputTimeout, getISTTime } from "../common/environment-variables";
 
 const ULTRAVOX_API_KEY = process.env.ULTRAVOX_API_KEY || "";
 const ULTRAVOX_CALL_API =
@@ -28,7 +28,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     super(
       session,
       () => {
-        console.log(`${new Date().toISOString()}:[UltraVox] No input timeout`);
+        console.log(`${getISTTime()}:[UltraVox] No input timeout`);
         this.handleNoInput();
       },
       getNoInputTimeout()
@@ -61,9 +61,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       selectedTools: [],
     };
 
-    console.log(
-      `${new Date().toISOString()}:[UltraVox] Creating call with correct config`
-    );
+    console.log(`${getISTTime()}:[UltraVox] Creating call with correct config`);
 
     const response = await fetch(ULTRAVOX_CALL_API, {
       method: "POST",
@@ -89,9 +87,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
   private async connectWebSocket(joinUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log(
-        `${new Date().toISOString()}:[UltraVox] Connecting to: ${joinUrl}`
-      );
+      console.log(`${getISTTime()}:[UltraVox] Connecting to: ${joinUrl}`);
 
       this.ultraVoxWs = new WebSocket(joinUrl);
 
@@ -105,7 +101,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       this.ultraVoxWs.on("open", () => {
         clearTimeout(timeout);
         console.log(
-          `${new Date().toISOString()}:[UltraVox] WebSocket connected - starting audio streaming`
+          `${getISTTime()}:[UltraVox] WebSocket connected - starting audio streaming`
         );
         this.startContinuousAudioStreaming();
         resolve();
@@ -117,15 +113,12 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
       this.ultraVoxWs.on("error", (error: Error) => {
         clearTimeout(timeout);
-        console.error(
-          `${new Date().toISOString()}:[UltraVox] WebSocket error:`,
-          error
-        );
+        console.error(`${getISTTime()}:[UltraVox] WebSocket error:`, error);
         reject(error);
       });
 
       this.ultraVoxWs.on("close", () => {
-        console.log(`${new Date().toISOString()}:[UltraVox] WebSocket closed`);
+        console.log(`${getISTTime()}:[UltraVox] WebSocket closed`);
         this.stopContinuousAudioStreaming();
         this.ultraVoxWs = null;
       });
@@ -142,7 +135,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       Math.floor((ULTRAVOX_SAMPLE_RATE * AUDIO_FRAME_SIZE_MS) / 1000) *
       CHANNELS;
     console.log(
-      `${new Date().toISOString()}:[UltraVox] Starting continuous streaming: ${frameSize} samples every ${AUDIO_FRAME_SIZE_MS}ms`
+      `${getISTTime()}:[UltraVox] Starting continuous streaming: ${frameSize} samples every ${AUDIO_FRAME_SIZE_MS}ms`
     );
 
     this.audioStreamingTask = setInterval(() => {
@@ -155,7 +148,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       clearInterval(this.audioStreamingTask);
       this.audioStreamingTask = null;
       console.log(
-        `${new Date().toISOString()}:[UltraVox] Stopped continuous audio streaming`
+        `${getISTTime()}:[UltraVox] Stopped continuous audio streaming`
       );
     }
   }
@@ -187,7 +180,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     if (!this.isAgentConnected()) return;
 
     console.log(
-      `${new Date().toISOString()}:[UltraVox] Processing customer audio: ${
+      `${getISTTime()}:[UltraVox] Processing customer audio: ${
         audioPayload.length
       } bytes`
     );
@@ -211,7 +204,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     this.audioBuffer = newBuffer;
 
     console.log(
-      `${new Date().toISOString()}:[UltraVox] Added ${
+      `${getISTTime()}:[UltraVox] Added ${
         resampledSamples.length
       } samples to buffer (total: ${this.audioBuffer.length})`
     );
@@ -223,7 +216,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
         // FIXED: Handle binary audio data from UltraVox
         const audioData = new Int16Array(data);
         console.log(
-          `${new Date().toISOString()}:[UltraVox] Received agent audio: ${
+          `${getISTTime()}:[UltraVox] Received agent audio: ${
             audioData.length
           } samples`
         );
@@ -245,9 +238,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
       // Handle JSON messages
       const message = JSON.parse(data.toString());
-      console.log(
-        `${new Date().toISOString()}:[UltraVox] Message: ${message.type}`
-      );
+      console.log(`${getISTTime()}:[UltraVox] Message: ${message.type}`);
 
       switch (message.type) {
         case "transcript":
@@ -283,14 +274,12 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
         default:
           console.log(
-            `${new Date().toISOString()}:[UltraVox] Unhandled message: ${
-              message.type
-            }`
+            `${getISTTime()}:[UltraVox] Unhandled message: ${message.type}`
           );
       }
     } catch (error) {
       console.error(
-        `${new Date().toISOString()}:[UltraVox] Message processing error:`,
+        `${getISTTime()}:[UltraVox] Message processing error:`,
         error
       );
     }
@@ -400,7 +389,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   }
 
   async processPlaybackCompleted(): Promise<void> {
-    console.log(`${new Date().toISOString()}:[UltraVox] Playback completed`);
+    console.log(`${getISTTime()}:[UltraVox] Playback completed`);
     this.noInputTimer.startTimer();
   }
 
@@ -418,7 +407,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   }
 
   async close(): Promise<void> {
-    console.log(`${new Date().toISOString()}:[UltraVox] Closing connection`);
+    console.log(`${getISTTime()}:[UltraVox] Closing connection`);
 
     this.stopContinuousAudioStreaming();
 
@@ -436,24 +425,17 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     this.isInitializing = true;
 
     try {
-      console.log(
-        `${new Date().toISOString()}:[UltraVox] Creating UltraVox call...`
-      );
+      console.log(`${getISTTime()}:[UltraVox] Creating UltraVox call...`);
       const callResponse = await this.createCall();
       this.callId = callResponse.callId;
       this.joinUrl = callResponse.joinUrl;
 
       console.log(
-        `${new Date().toISOString()}:[UltraVox] Call created - ID: ${
-          this.callId
-        }`
+        `${getISTTime()}:[UltraVox] Call created - ID: ${this.callId}`
       );
       await this.connectWebSocket(this.joinUrl);
     } catch (error) {
-      console.error(
-        `${new Date().toISOString()}:[UltraVox] Initialization failed:`,
-        error
-      );
+      console.error(`${getISTTime()}:[UltraVox] Initialization failed:`, error);
       this.session.sendDisconnect(
         "error",
         "Failed to initialize AI service",

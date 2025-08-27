@@ -1,6 +1,7 @@
 import { error } from "console";
 import { Session } from "../websocket/session";
 import { Timer } from "./timer";
+import { getISTTime } from "../common/environment-variables";
 
 /**
  * Base class for all voice AI agents, providing common session and timeout handling.
@@ -38,9 +39,7 @@ export abstract class VoiceAIAgentBaseClass {
    */
   async processPlaybackCompleted(): Promise<void> {
     if (this.isAgentConnected()) {
-      console.log(
-        `${new Date().toISOString()}:PlaybackCompleted|Starting no input timer`
-      );
+      console.log(`${getISTTime()}:PlaybackCompleted|Starting no input timer`);
       this.noInputTimer.startTimer();
     }
   }
@@ -78,7 +77,7 @@ export abstract class VoiceAIAgentBaseClass {
       return fileData;
     } catch (error) {
       console.error(
-        new Date().toISOString() +
+        getISTTime() +
           ":" +
           `[OpenAI] Error reading system message from file ${fileName}:`,
         error
@@ -98,7 +97,7 @@ export abstract class VoiceAIAgentBaseClass {
         return JSON.parse(fileData);
       } catch (jsonErr) {
         console.error(
-          new Date().toISOString() +
+          getISTTime() +
             ":" +
             `[OpenAI] Error parsing JSON from file ${filePath}:`,
           jsonErr
@@ -121,7 +120,7 @@ export abstract class VoiceAIAgentBaseClass {
       } else {
         errorMessage = `[OpenAI] Error reading file ${filePath}:`;
       }
-      console.error(new Date().toISOString() + ":" + errorMessage, fsErr);
+      console.error(getISTTime() + ":" + errorMessage, fsErr);
       throw new Error(errorMessage);
     }
   }
@@ -134,7 +133,7 @@ export abstract class VoiceAIAgentBaseClass {
     const toolFileName =
       this.session.getInputVariables().promptName + "Tools.json";
     console.log(
-      new Date().toISOString() +
+      getISTTime() +
         ":" +
         `[OpenAI] Loading system tools from file: ${toolFileName}`
     );
@@ -145,7 +144,7 @@ export abstract class VoiceAIAgentBaseClass {
         return tools;
       } else {
         console.error(
-          new Date().toISOString() +
+          getISTTime() +
             ":" +
             `[OpenAI] Invalid tools format in file ${filePath}`
         );
@@ -153,7 +152,7 @@ export abstract class VoiceAIAgentBaseClass {
       }
     } catch (error) {
       console.error(
-        new Date().toISOString() + ":" + `[OpenAI] Error loading system tools:`,
+        getISTTime() + ":" + `[OpenAI] Error loading system tools:`,
         error
       );
     }
@@ -183,7 +182,7 @@ export abstract class VoiceAIAgentBaseClass {
     // Default implementation for playback completion
     async processPlaybackCompleted(): Promise<void> {
         if (this.isAgentConnected()) {
-            console.log(`${new Date().toISOString()}:[VoiceAI] Playback completed - starting no-input timer`);
+            console.log(`${getISTTime()}:[VoiceAI] Playback completed - starting no-input timer`);
             this.noInputTimer.startTimer();
         }
     }

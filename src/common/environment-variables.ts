@@ -8,6 +8,18 @@ export function getPort(): number {
   return DEFAULT_PORT;
 }
 
+export function getISTTime(): string {
+  return new Date().toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function getMAXBinaryMessageSize(): number {
   return Number(process.env.MAXIMUM_BINARY_MESSAGE_SIZE) || 64000;
 }

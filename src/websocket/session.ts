@@ -27,6 +27,7 @@ import { VoiceAIAgentFactory } from "../services/voice-aiagent-factory";
 import {
   getMAXBinaryMessageSize,
   getMinBinaryMessageSize,
+  getISTTime,
 } from "../common/environment-variables";
 
 const BOT_PROVIDER = process.env.BOT_PROVIDER || "UltraVox";
@@ -65,44 +66,40 @@ export class Session {
 
     if (!sessionId) {
       console.warn(
-        `${new Date().toISOString()}:[Session] No session ID provided - generated: ${
+        `${getISTTime()}:[Session] No session ID provided - generated: ${
           this.clientSessionId
         }`
       );
     } else {
       console.log(
-        `${new Date().toISOString()}:[Session] Created session: ${
-          this.clientSessionId
-        }`
+        `${getISTTime()}:[Session] Created session: ${this.clientSessionId}`
       );
     }
 
     // FIXED: DON'T initialize UltraVox here - wait for Genesys "open" message
     console.log(
-      `${new Date().toISOString()}:[Session] Session ready - waiting for Genesys 'open' message to initialize voice agent`
+      `${getISTTime()}:[Session] Session ready - waiting for Genesys 'open' message to initialize voice agent`
     );
   }
 
   // NEW METHOD: Initialize voice agent after Genesys handshake
   initializeVoiceAgent() {
     if (this.voiceAIAgentClient) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Voice agent already initialized`
-      );
+      console.log(`${getISTTime()}:[Session] Voice agent already initialized`);
       return;
     }
 
     try {
       console.log(
-        `${new Date().toISOString()}:[Session] Starting UltraVox after Genesys handshake completed`
+        `${getISTTime()}:[Session] Starting UltraVox after Genesys handshake completed`
       );
       this.voiceAIAgentClient = VoiceAIAgentFactory.create(BOT_PROVIDER, this);
       console.log(
-        `${new Date().toISOString()}:[Session] Voice AI Agent initialized: ${BOT_PROVIDER}`
+        `${getISTTime()}:[Session] Voice AI Agent initialized: ${BOT_PROVIDER}`
       );
     } catch (error) {
       console.error(
-        `${new Date().toISOString()}:[Session] Failed to initialize Voice AI Agent:`,
+        `${getISTTime()}:[Session] Failed to initialize Voice AI Agent:`,
         error
       );
       this.sendDisconnect("error", "Failed to initialize AI service", {});
@@ -131,15 +128,13 @@ export class Session {
 
   close() {
     if (this.closed) {
-      console.log(`${new Date().toISOString()}:[Session] Already closed`);
+      console.log(`${getISTTime()}:[Session] Already closed`);
       return;
     }
 
     try {
       console.log(
-        `${new Date().toISOString()}:[Session] Closing session: ${
-          this.clientSessionId
-        }`
+        `${getISTTime()}:[Session] Closing session: ${this.clientSessionId}`
       );
 
       // Close Voice AI Agent first (if initialized)
@@ -148,31 +143,24 @@ export class Session {
       // Close WebSocket
       this.ws.close();
     } catch (error) {
-      console.error(
-        `${new Date().toISOString()}:[Session] Error closing:`,
-        error
-      );
+      console.error(`${getISTTime()}:[Session] Error closing:`, error);
     }
 
     this.closed = true;
     console.log(
-      `${new Date().toISOString()}:[Session] Session closed: ${
-        this.clientSessionId
-      }`
+      `${getISTTime()}:[Session] Session closed: ${this.clientSessionId}`
     );
   }
 
   setConversationId(conversationId: string) {
     this.conversationId = conversationId;
-    console.log(
-      `${new Date().toISOString()}:[Session] Conversation ID: ${conversationId}`
-    );
+    console.log(`${getISTTime()}:[Session] Conversation ID: ${conversationId}`);
   }
 
   setInputVariables(inputVariables: JsonStringMap) {
     this.inputVariables = inputVariables;
     console.log(
-      `${new Date().toISOString()}:[Session] Input variables:`,
+      `${getISTTime()}:[Session] Input variables:`,
       JSON.stringify(inputVariables)
     );
   }
@@ -180,20 +168,18 @@ export class Session {
   setSelectedMedia(selectedMedia: MediaParameter) {
     this.selectedMedia = selectedMedia;
     console.log(
-      `${new Date().toISOString()}:[Session] Media:`,
+      `${getISTTime()}:[Session] Media:`,
       JSON.stringify(selectedMedia)
     );
   }
 
   setIsAudioPlaying(isAudioPlaying: boolean) {
     this.isAudioPlaying = isAudioPlaying;
-    console.log(
-      `${new Date().toISOString()}:[Session] Audio playing: ${isAudioPlaying}`
-    );
+    console.log(`${getISTTime()}:[Session] Audio playing: ${isAudioPlaying}`);
   }
 
   playbackCompleted() {
-    console.log(`${new Date().toISOString()}:[Session] Playback completed`);
+    console.log(`${getISTTime()}:[Session] Playback completed`);
     this.setIsAudioPlaying(false);
     this.voiceAIAgentClient?.processPlaybackCompleted();
   }
@@ -201,7 +187,7 @@ export class Session {
   processTextMessage(data: string) {
     if (this.closed) {
       console.log(
-        `${new Date().toISOString()}:[Session] Ignoring text message - session closed`
+        `${getISTTime()}:[Session] Ignoring text message - session closed`
       );
       return;
     }
@@ -209,9 +195,7 @@ export class Session {
     try {
       const message = JSON.parse(data);
       console.log(
-        `${new Date().toISOString()}:[Session] Processing message: ${
-          message.type
-        }`
+        `${getISTTime()}:[Session] Processing message: ${message.type}`
       );
 
       // Handle test messages more gracefully
@@ -226,7 +210,7 @@ export class Session {
         message.seq !== this.lastClientSequenceNumber + 1
       ) {
         console.warn(
-          `${new Date().toISOString()}:[Session] Invalid client sequence: expected ${
+          `${getISTTime()}:[Session] Invalid client sequence: expected ${
             this.lastClientSequenceNumber + 1
           }, got ${message.seq}`
         );
@@ -246,7 +230,7 @@ export class Session {
         message.serverseq > this.lastServerSequenceNumber
       ) {
         console.warn(
-          `${new Date().toISOString()}:[Session] Invalid server sequence: ${
+          `${getISTTime()}:[Session] Invalid server sequence: ${
             message.serverseq
           }`
         );
@@ -259,7 +243,7 @@ export class Session {
       // More flexible ID validation
       if (message.id && message.id !== this.clientSessionId) {
         console.warn(
-          `${new Date().toISOString()}:[Session] Session ID mismatch: expected ${
+          `${getISTTime()}:[Session] Session ID mismatch: expected ${
             this.clientSessionId
           }, got ${message.id}`
         );
@@ -272,9 +256,7 @@ export class Session {
       const handler = this.messageHandlerRegistry.getHandler(message.type);
       if (!handler) {
         console.log(
-          `${new Date().toISOString()}:[Session] No handler for: ${
-            message.type
-          }`
+          `${getISTTime()}:[Session] No handler for: ${message.type}`
         );
         return;
       }
@@ -282,7 +264,7 @@ export class Session {
       handler.handleMessage(message as ClientMessage, this);
     } catch (error) {
       console.error(
-        `${new Date().toISOString()}:[Session] Error processing text message:`,
+        `${getISTTime()}:[Session] Error processing text message:`,
         error
       );
       if (this.isProductionConnection()) {
@@ -311,24 +293,20 @@ export class Session {
 
   private handleTestMessage(message: any) {
     console.log(
-      `${new Date().toISOString()}:[Session] Handling test message: ${
-        message.type
-      }`
+      `${getISTTime()}:[Session] Handling test message: ${message.type}`
     );
 
     if (message.type === "ping" || message.type === "test") {
       // Send a simple test response
       const testResponse = {
         type: "pong",
-        timestamp: new Date().toISOString(),
+        timestamp: getISTTime(),
         status: "ok",
         message:
           "Test connection successful - waiting for Genesys 'open' message to start voice agent",
       };
 
-      console.log(
-        `${new Date().toISOString()}:[Session] Sending test pong response`
-      );
+      console.log(`${getISTTime()}:[Session] Sending test pong response`);
 
       this.ws.send(JSON.stringify(testResponse));
     }
@@ -351,22 +329,18 @@ export class Session {
 
   send(message: ServerMessage) {
     if (this.closed) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Cannot send - session closed`
-      );
+      console.log(`${getISTTime()}:[Session] Cannot send - session closed`);
       return;
     }
 
     if (message.type === "event") {
       console.log(
-        `${new Date().toISOString()}:[Session] Sending event: ${
+        `${getISTTime()}:[Session] Sending event: ${
           message.parameters.entities[0].type
         }`
       );
     } else {
-      console.log(
-        `${new Date().toISOString()}:[Session] Sending: ${message.type}`
-      );
+      console.log(`${getISTTime()}:[Session] Sending: ${message.type}`);
     }
 
     this.ws.send(JSON.stringify(message));
@@ -376,9 +350,7 @@ export class Session {
     const totalLength =
       this.buffer?.reduce((acc, curr) => acc + curr.length, 0) || 0;
     if (totalLength <= 0) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Buffer empty - nothing to flush`
-      );
+      console.log(`${getISTTime()}:[Session] Buffer empty - nothing to flush`);
       return;
     }
 
@@ -396,7 +368,7 @@ export class Session {
   sendAudio(currBytes: Uint8Array) {
     if (this.closed) {
       console.log(
-        `${new Date().toISOString()}:[Session] Cannot send audio - session closed`
+        `${getISTTime()}:[Session] Cannot send audio - session closed`
       );
       return;
     }
@@ -407,7 +379,7 @@ export class Session {
 
     if (totalLength < this.MIN_BINARY_MESSAGE_SIZE) {
       console.log(
-        `${new Date().toISOString()}:[Session] Buffering audio (${totalLength}/${
+        `${getISTTime()}:[Session] Buffering audio (${totalLength}/${
           this.MIN_BINARY_MESSAGE_SIZE
         })`
       );
@@ -429,9 +401,7 @@ export class Session {
   private sendAudioChunks(bytes: Uint8Array) {
     if (bytes.length <= this.MAXIMUM_BINARY_MESSAGE_SIZE) {
       console.log(
-        `${new Date().toISOString()}:[Session] Sending audio: ${
-          bytes.length
-        } bytes`
+        `${getISTTime()}:[Session] Sending audio: ${bytes.length} bytes`
       );
       this.ws.send(bytes, { binary: true });
     } else {
@@ -444,7 +414,7 @@ export class Session {
           currentPosition + this.MAXIMUM_BINARY_MESSAGE_SIZE
         );
         console.log(
-          `${new Date().toISOString()}:[Session] Sending chunk ${++chunkCount}: ${
+          `${getISTTime()}:[Session] Sending chunk ${++chunkCount}: ${
             sendBytes.length
           } bytes`
         );
@@ -464,7 +434,7 @@ export class Session {
     } as SelectParametersForType<"event", EventParameters>);
 
     this.buffer.length = 0; // Clear buffer on barge-in
-    console.log(`${new Date().toISOString()}:[Session] Sending barge-in`);
+    console.log(`${getISTTime()}:[Session] Sending barge-in`);
     this.send(message);
   }
 
@@ -486,7 +456,7 @@ export class Session {
     } as SelectParametersForType<"event", EventParameters>);
 
     console.log(
-      `${new Date().toISOString()}:[Session] Sending bot response: ${disposition} - ${text}`
+      `${getISTTime()}:[Session] Sending bot response: ${disposition} - ${text}`
     );
     this.send(message);
   }
@@ -494,9 +464,7 @@ export class Session {
   sendTranscript(transcript: string, confidence: number, isFinal: boolean) {
     const channel = this.selectedMedia?.channels[0];
     if (!channel) {
-      console.log(
-        `${new Date().toISOString()}:[Session] No channel for transcript`
-      );
+      console.log(`${getISTTime()}:[Session] No channel for transcript`);
       return;
     }
 
@@ -527,7 +495,7 @@ export class Session {
     } as SelectParametersForType<"event", EventParameters>);
 
     console.log(
-      `${new Date().toISOString()}:[Session] Transcript: "${transcript}" (final: ${isFinal})`
+      `${getISTTime()}:[Session] Transcript: "${transcript}" (final: ${isFinal})`
     );
     this.send(message);
   }
@@ -538,9 +506,7 @@ export class Session {
     outputVariables: JsonStringMap
   ) {
     this.disconnecting = true;
-    console.log(
-      `${new Date().toISOString()}:[Session] Disconnecting: ${reason} - ${info}`
-    );
+    console.log(`${getISTTime()}:[Session] Disconnecting: ${reason} - ${info}`);
 
     const disconnectParameters: DisconnectParameters = {
       reason,
@@ -553,12 +519,12 @@ export class Session {
 
   sendClosed() {
     const message = this.createMessage("closed", {});
-    console.log(`${new Date().toISOString()}:[Session] Sending closed`);
+    console.log(`${getISTTime()}:[Session] Sending closed`);
     this.send(message);
   }
 
   sendKeepAlive() {
-    console.log(`${new Date().toISOString()}:[Session] Sending keep-alive`);
+    console.log(`${getISTTime()}:[Session] Sending keep-alive`);
     this.send(this.createMessage("pong", {}));
     this.voiceAIAgentClient?.sendKeepAlive();
   }
@@ -567,13 +533,13 @@ export class Session {
   sendAudioFromAgent(audioData: Uint8Array) {
     if (this.closed) {
       console.log(
-        `${new Date().toISOString()}:[Session] Cannot send agent audio - session closed`
+        `${getISTTime()}:[Session] Cannot send agent audio - session closed`
       );
       return;
     }
 
     console.log(
-      `${new Date().toISOString()}:[Session] Received AGENT audio from UltraVox: ${
+      `${getISTTime()}:[Session] Received AGENT audio from UltraVox: ${
         audioData.length
       } bytes -> sending to Genesys customer`
     );
@@ -585,28 +551,24 @@ export class Session {
   // Clarify this processes customer audio TO UltraVox
   processBinaryMessage(data: Uint8Array) {
     if (this.disconnecting || this.closed) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Ignoring audio - session closing`
-      );
+      console.log(`${getISTTime()}:[Session] Ignoring audio - session closing`);
       return;
     }
 
     if (this.isCapturingDTMF) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Ignoring audio - capturing DTMF`
-      );
+      console.log(`${getISTTime()}:[Session] Ignoring audio - capturing DTMF`);
       return;
     }
 
     if (!this.voiceAIAgentClient) {
       console.log(
-        `${new Date().toISOString()}:[Session] Ignoring audio - voice agent not initialized yet (waiting for 'open' message)`
+        `${getISTTime()}:[Session] Ignoring audio - voice agent not initialized yet (waiting for 'open' message)`
       );
       return;
     }
 
     console.log(
-      `${new Date().toISOString()}:[Session] Processing CUSTOMER audio from Genesys: ${
+      `${getISTTime()}:[Session] Processing CUSTOMER audio from Genesys: ${
         data.length
       } bytes -> sending to UltraVox`
     );
@@ -618,50 +580,38 @@ export class Session {
   // DTMF processing
   processDTMF(digit: string) {
     if (this.disconnecting || this.closed) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Ignoring DTMF - session closing`
-      );
+      console.log(`${getISTTime()}:[Session] Ignoring DTMF - session closing`);
       return;
     }
 
     if (this.isAudioPlaying) {
-      console.log(
-        `${new Date().toISOString()}:[Session] Ignoring DTMF - audio playing`
-      );
+      console.log(`${getISTTime()}:[Session] Ignoring DTMF - audio playing`);
       this.dtmfService = null;
       return;
     }
 
     if (!this.isCapturingDTMF) {
       this.isCapturingDTMF = true;
-      console.log(`${new Date().toISOString()}:[Session] Started DTMF capture`);
+      console.log(`${getISTTime()}:[Session] Started DTMF capture`);
     }
 
     if (!this.dtmfService || this.dtmfService.getState() === "Complete") {
       this.dtmfService = new DTMFService()
         .on("error", (error: any) => {
           const message = "Error during DTMF Capture.";
-          console.log(
-            `${new Date().toISOString()}:[Session] DTMF error: ${error}`
-          );
+          console.log(`${getISTTime()}:[Session] DTMF error: ${error}`);
           this.sendDisconnect("error", message, {});
         })
         .on("final-digits", (digits: any) => {
           this.sendTranscript(digits, 1.0, true);
-          console.log(
-            `${new Date().toISOString()}:[Session] DTMF captured: ${digits}`
-          );
+          console.log(`${getISTTime()}:[Session] DTMF captured: ${digits}`);
           this.isCapturingDTMF = false;
         });
 
-      console.log(
-        `${new Date().toISOString()}:[Session] DTMF service initialized`
-      );
+      console.log(`${getISTTime()}:[Session] DTMF service initialized`);
     }
 
-    console.log(
-      `${new Date().toISOString()}:[Session] Processing DTMF: ${digit}`
-    );
+    console.log(`${getISTTime()}:[Session] Processing DTMF: ${digit}`);
     this.dtmfService.processDigit(digit);
   }
 }

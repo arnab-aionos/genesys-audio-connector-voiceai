@@ -2,11 +2,11 @@ import WS, { WebSocket } from "ws";
 import express, { Express, Request } from "express";
 import { verifyRequestSignature } from "../auth/authenticator";
 import { Session } from "./session";
-import { getPort } from "../common/environment-variables";
+import { getPort, getISTTime } from "../common/environment-variables";
 import { SecretService } from "../services/secret-service";
 
 console.log("=== SERVER STARTUP ===");
-console.log("Time:", new Date().toISOString());
+console.log("Time:", getISTTime());
 console.log("Process PID:", process.pid);
 console.log("=====================");
 
@@ -22,13 +22,13 @@ export class Server {
     process.env.ENABLE_SIGNATURE_VERIFICATION !== "false";
 
   start() {
-    console.log(`${new Date().toISOString()}:[Server] CREATING EXPRESS APP`);
+    console.log(`${getISTTime()}:[Server] CREATING EXPRESS APP`);
     this.app = express();
 
     // Add middleware and routes BEFORE creating the server
     this.app.use((req, res, next) => {
       console.log("=== HTTP REQUEST ===");
-      console.log("Time:", new Date().toISOString());
+      console.log("Time:", getISTTime());
       console.log("Method:", req.method);
       console.log("URL:", req.url);
       console.log("Headers:", JSON.stringify(req.headers, null, 2));
@@ -39,12 +39,10 @@ export class Server {
 
     // Health check endpoint (no auth required)
     this.app.get("/health", (_req, res) => {
-      console.log(
-        `${new Date().toISOString()}:[Server] Health check requested`
-      );
+      console.log(`${getISTTime()}:[Server] Health check requested`);
       res.status(200).json({
         status: "ok",
-        timestamp: new Date().toISOString(),
+        timestamp: getISTTime(),
         uptime: process.uptime(),
         activeConnections: this.sessionMap.size,
         endpoint: `ws://localhost:${getPort()}/`,
@@ -59,7 +57,7 @@ export class Server {
 
       if (!this.validateApiKey(apiKey)) {
         console.log(
-          `${new Date().toISOString()}:[Server] Invalid API key in test endpoint`
+          `${getISTTime()}:[Server] Invalid API key in test endpoint`
         );
         return res.status(401).json({
           error: "Unauthorized",
@@ -68,27 +66,25 @@ export class Server {
       }
 
       console.log(
-        `${new Date().toISOString()}:[Server] Test endpoint called with valid API key`
+        `${getISTTime()}:[Server] Test endpoint called with valid API key`
       );
 
       res.status(200).json({
         message: "Authentication successful",
-        timestamp: new Date().toISOString(),
+        timestamp: getISTTime(),
         apiKeyValid: true,
       });
     });
 
-    console.log(`${new Date().toISOString()}:[Server] CREATING HTTP SERVER`);
+    console.log(`${getISTTime()}:[Server] CREATING HTTP SERVER`);
     // Create HTTP server ONLY ONCE
     this.httpServer = this.app.listen(getPort(), "0.0.0.0", () => {
       console.log(
-        `${new Date().toISOString()}:[Server] HTTP SERVER LISTENING ON PORT ${getPort()}`
+        `${getISTTime()}:[Server] HTTP SERVER LISTENING ON PORT ${getPort()}`
       );
     });
 
-    console.log(
-      `${new Date().toISOString()}:[Server] CREATING WEBSOCKET SERVER`
-    );
+    console.log(`${getISTTime()}:[Server] CREATING WEBSOCKET SERVER`);
 
     // Create WebSocket server using the existing HTTP server
     this.wsServer = new WebSocket.Server({
@@ -100,7 +96,7 @@ export class Server {
       "upgrade",
       (request: Request, socket: any, head: any) => {
         console.log("=== WEBSOCKET UPGRADE REQUEST ===");
-        console.log("Time:", new Date().toISOString());
+        console.log("Time:", getISTTime());
         console.log("URL:", request.url);
         console.log("Method:", request.method);
         console.log("HTTP Version:", request.httpVersion);
@@ -121,7 +117,7 @@ export class Server {
 
         if (this.enableKeyVerification && !this.validateApiKey(apiKey)) {
           console.log(
-            `${new Date().toISOString()}:[Server] WebSocket authentication failed - invalid API key`
+            `${getISTTime()}:[Server] WebSocket authentication failed - invalid API key`
           );
           socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
           socket.destroy();
@@ -137,13 +133,13 @@ export class Server {
         if (hasGenesysHeaders && this.enableSignatureVerification) {
           // This is a Genesys connection - verify signature
           console.log(
-            `${new Date().toISOString()}:[Server] Genesys headers detected - verifying signature`
+            `${getISTTime()}:[Server] Genesys headers detected - verifying signature`
           );
           verifyRequestSignature(request, this.secretService).then(
             (verifyResult) => {
               if (verifyResult.code !== "VERIFIED") {
                 console.log(
-                  `${new Date().toISOString()}:[Server] Genesys signature verification failed: ${
+                  `${getISTTime()}:[Server] Genesys signature verification failed: ${
                     verifyResult.code
                   }`
                 );
@@ -152,7 +148,7 @@ export class Server {
                 return;
               }
               console.log(
-                `${new Date().toISOString()}:[Server] Genesys signature verified successfully`
+                `${getISTTime()}:[Server] Genesys signature verified successfully`
               );
               this.handleWebSocketUpgrade(request, socket, head);
             }
@@ -161,11 +157,11 @@ export class Server {
           // This is a test/browser connection or signature verification is disabled
           if (!hasGenesysHeaders) {
             console.log(
-              `${new Date().toISOString()}:[Server] Test connection detected - no Genesys headers found`
+              `${getISTTime()}:[Server] Test connection detected - no Genesys headers found`
             );
           } else {
             console.log(
-              `${new Date().toISOString()}:[Server] Signature verification disabled via environment`
+              `${getISTTime()}:[Server] Signature verification disabled via environment`
             );
           }
           this.handleWebSocketUpgrade(request, socket, head);
@@ -185,19 +181,17 @@ export class Server {
     // Handle new WebSocket connections
     this.wsServer.on("connection", (ws: WebSocket, request: Request) => {
       console.log(
-        `${new Date().toISOString()}:[Server] New WebSocket connection established`
+        `${getISTTime()}:[Server] New WebSocket connection established`
       );
 
       ws.on("close", () => {
-        console.log(`${new Date().toISOString()}:[Server] WebSocket closed`);
+        console.log(`${getISTTime()}:[Server] WebSocket closed`);
         this.deleteConnection(ws);
       });
 
       ws.on("error", (error: Error) => {
         console.log(
-          `${new Date().toISOString()}:[Server] WebSocket error: ${
-            error.message
-          }`
+          `${getISTTime()}:[Server] WebSocket error: ${error.message}`
         );
         ws.close();
       });
@@ -205,16 +199,14 @@ export class Server {
       ws.on("message", (data: WS.RawData, isBinary: boolean) => {
         if (ws.readyState !== WebSocket.OPEN) {
           console.log(
-            `${new Date().toISOString()}:[Server] Message received on closed socket`
+            `${getISTTime()}:[Server] Message received on closed socket`
           );
           return;
         }
 
         const session = this.sessionMap.get(ws);
         if (!session) {
-          console.log(
-            `${new Date().toISOString()}:[Server] No session for message`
-          );
+          console.log(`${getISTTime()}:[Server] No session for message`);
           const dummySession: Session = new Session(
             ws,
             request.headers["audiohook-session-id"] as string,
@@ -234,19 +226,17 @@ export class Server {
       this.createConnection(ws, request);
     });
 
+    console.log(`${getISTTime()}:[Server] Server started successfully`);
     console.log(
-      `${new Date().toISOString()}:[Server] Server started successfully`
+      `${getISTTime()}:[Server] WebSocket endpoint: ws://localhost:${getPort()}/`
     );
     console.log(
-      `${new Date().toISOString()}:[Server] WebSocket endpoint: ws://localhost:${getPort()}/`
-    );
-    console.log(
-      `${new Date().toISOString()}:[Server] API Key verification: ${
+      `${getISTTime()}:[Server] API Key verification: ${
         this.enableKeyVerification
       }`
     );
     console.log(
-      `${new Date().toISOString()}:[Server] Signature verification: ${
+      `${getISTTime()}:[Server] Signature verification: ${
         this.enableSignatureVerification
       }`
     );
@@ -255,7 +245,7 @@ export class Server {
   private handleWebSocketUpgrade(request: Request, socket: any, head: any) {
     this.wsServer.handleUpgrade(request, socket, head, (ws: WebSocket) => {
       console.log(
-        `${new Date().toISOString()}:[Server] Authentication successful - WebSocket connected`
+        `${getISTTime()}:[Server] Authentication successful - WebSocket connected`
       );
       this.wsServer.emit("connection", ws, request);
     });
@@ -263,7 +253,7 @@ export class Server {
 
   private validateApiKey(apiKey: string): boolean {
     if (!apiKey) {
-      console.log(`${new Date().toISOString()}:[Server] Missing API key`);
+      console.log(`${getISTTime()}:[Server] Missing API key`);
       return false;
     }
 
@@ -271,26 +261,20 @@ export class Server {
 
     if (!validApiKey) {
       console.warn(
-        `${new Date().toISOString()}:[Server] WARNING: SERVER_X_API_KEY not configured!`
+        `${getISTTime()}:[Server] WARNING: SERVER_X_API_KEY not configured!`
       );
       return false;
     }
 
     if (apiKey !== validApiKey) {
       console.log(
-        `${new Date().toISOString()}:[Server] Invalid API key: ${apiKey.substring(
-          0,
-          8
-        )}...`
+        `${getISTTime()}:[Server] Invalid API key: ${apiKey.substring(0, 8)}...`
       );
       return false;
     }
 
     console.log(
-      `${new Date().toISOString()}:[Server] Valid API key: ${apiKey.substring(
-        0,
-        8
-      )}...`
+      `${getISTTime()}:[Server] Valid API key: ${apiKey.substring(0, 8)}...`
     );
     return true;
   }
@@ -307,7 +291,7 @@ export class Server {
       request.url
     );
     console.log(
-      `${new Date().toISOString()}:[Server] Created session: ${session.getClientSessionId()}`
+      `${getISTTime()}:[Server] Created session: ${session.getClientSessionId()}`
     );
     this.sessionMap.set(ws, session);
   }
@@ -320,18 +304,15 @@ export class Server {
 
     try {
       console.log(
-        `${new Date().toISOString()}:[Server] Closing session: ${session.getClientSessionId()}`
+        `${getISTTime()}:[Server] Closing session: ${session.getClientSessionId()}`
       );
       session.close();
     } catch (error) {
-      console.error(
-        `${new Date().toISOString()}:[Server] Error closing session:`,
-        error
-      );
+      console.error(`${getISTTime()}:[Server] Error closing session:`, error);
     }
 
     console.log(
-      `${new Date().toISOString()}:[Server] Deleted session: ${session.getClientSessionId()}`
+      `${getISTTime()}:[Server] Deleted session: ${session.getClientSessionId()}`
     );
     this.sessionMap.delete(ws);
   }

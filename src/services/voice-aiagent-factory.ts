@@ -1,13 +1,14 @@
 import { VoiceAIAgentBaseClass } from "./voice-aiagent-base";
 import { UltraVoxAgent } from "./ultravox-agent";
 import { Session } from "../websocket/session";
+import { getISTTime } from "../common/environment-variables";
 
 export class VoiceAIAgentFactory {
   static create(agentName: string, session: Session): VoiceAIAgentBaseClass {
     const name = (agentName || "UltraVox").toLowerCase();
 
     console.log(
-      `${new Date().toISOString()}:[VoiceAIAgentFactory] Creating agent: ${name}`
+      `${getISTTime()}:[VoiceAIAgentFactory] Creating agent: ${name}`
     );
 
     switch (name) {
@@ -16,7 +17,7 @@ export class VoiceAIAgentFactory {
 
       default:
         console.error(
-          `${new Date().toISOString()}:[VoiceAIAgentFactory] Unknown agent: ${agentName}`
+          `${getISTTime()}:[VoiceAIAgentFactory] Unknown agent: ${agentName}`
         );
         throw new Error(
           `[VoiceAIAgentFactory] Unsupported agent: ${agentName}. Only 'ultravox' is supported.`

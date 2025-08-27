@@ -6,6 +6,7 @@ import {
 } from "../../../protocol/message";
 import { Session } from "../../session";
 import { MessageHandler } from "../message-handler";
+import { getISTTime } from "../../../common/environment-variables";
 
 export class OpenMessageHandler implements MessageHandler {
   handleMessage(message: ClientMessage, session: Session) {
@@ -13,14 +14,14 @@ export class OpenMessageHandler implements MessageHandler {
 
     if (!parsedMessage) {
       const message = "Invalid request parameters.";
-      console.log(`${new Date().toISOString()}:[OpenHandler] ${message}`);
+      console.log(`${getISTTime()}:[OpenHandler] ${message}`);
       session.sendDisconnect("error", message, {});
       return;
     }
 
     session.setConversationId(parsedMessage.parameters.conversationId);
     console.log(
-      `${new Date().toISOString()}:[OpenHandler] Received Open Message for conversation: ${
+      `${getISTTime()}:[OpenHandler] Received Open Message for conversation: ${
         parsedMessage.parameters.conversationId
       }`
     );
@@ -36,13 +37,13 @@ export class OpenMessageHandler implements MessageHandler {
 
     if (!selectedMedia) {
       const message = "No supported media type was found.";
-      console.log(`${new Date().toISOString()}:[OpenHandler] ${message}`);
+      console.log(`${getISTTime()}:[OpenHandler] ${message}`);
       session.sendDisconnect("error", message, {});
       return;
     }
 
     console.log(
-      `${new Date().toISOString()}:[OpenHandler] Using MediaParameter: ${JSON.stringify(
+      `${getISTTime()}:[OpenHandler] Using MediaParameter: ${JSON.stringify(
         selectedMedia
       )}`
     );
@@ -51,7 +52,7 @@ export class OpenMessageHandler implements MessageHandler {
     // Set input variables if provided
     if (parsedMessage.parameters.inputVariables) {
       console.log(
-        `${new Date().toISOString()}:[OpenHandler] Setting input variables: ${JSON.stringify(
+        `${getISTTime()}:[OpenHandler] Setting input variables: ${JSON.stringify(
           parsedMessage.parameters.inputVariables
         )}`
       );
@@ -65,13 +66,13 @@ export class OpenMessageHandler implements MessageHandler {
       });
 
       console.log(
-        `${new Date().toISOString()}:[OpenHandler] Sending 'opened' response to Genesys`
+        `${getISTTime()}:[OpenHandler] Sending 'opened' response to Genesys`
       );
       session.send(response);
 
       // STEP 2: ONLY NOW initialize UltraVox after successful Genesys handshake
       console.log(
-        `${new Date().toISOString()}:[OpenHandler] Genesys handshake complete - now initializing UltraVox`
+        `${getISTTime()}:[OpenHandler] Genesys handshake complete - now initializing UltraVox`
       );
       session.initializeVoiceAgent();
     }
