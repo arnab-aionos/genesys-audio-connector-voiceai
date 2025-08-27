@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node --esm src/index.ts"
+    "dev": "ts-node src/index.ts"
   },
   "repository": {
     "type": "git",
@@ -16,15 +16,15 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "bugs": {
     "url": "https://github.com/arnab-aionos/genesys-audio-connector-voiceai/issues"
   },
   "homepage": "https://github.com/arnab-aionos/genesys-audio-connector-voiceai#readme",
   "dependencies": {
+    "@types/node-fetch": "^2.6.13",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "uuid": "^11.1.0",
     "ws": "^8.18.3"
   },
