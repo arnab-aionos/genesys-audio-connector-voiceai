@@ -77,8 +77,25 @@ export class Session {
       );
     }
 
-    // Initialize Voice AI Agent
+    // FIXED: DON'T initialize UltraVox here - wait for Genesys "open" message
+    console.log(
+      `${new Date().toISOString()}:[Session] Session ready - waiting for Genesys 'open' message to initialize voice agent`
+    );
+  }
+
+  // NEW METHOD: Initialize voice agent after Genesys handshake
+  initializeVoiceAgent() {
+    if (this.voiceAIAgentClient) {
+      console.log(
+        `${new Date().toISOString()}:[Session] Voice agent already initialized`
+      );
+      return;
+    }
+
     try {
+      console.log(
+        `${new Date().toISOString()}:[Session] Starting UltraVox after Genesys handshake completed`
+      );
       this.voiceAIAgentClient = VoiceAIAgentFactory.create(BOT_PROVIDER, this);
       console.log(
         `${new Date().toISOString()}:[Session] Voice AI Agent initialized: ${BOT_PROVIDER}`
@@ -88,7 +105,7 @@ export class Session {
         `${new Date().toISOString()}:[Session] Failed to initialize Voice AI Agent:`,
         error
       );
-      // Don't fail the session, continue without agent for testing
+      this.sendDisconnect("error", "Failed to initialize AI service", {});
     }
   }
 
@@ -125,7 +142,7 @@ export class Session {
         }`
       );
 
-      // Close Voice AI Agent first
+      // Close Voice AI Agent first (if initialized)
       this.voiceAIAgentClient?.close();
 
       // Close WebSocket
@@ -197,7 +214,7 @@ export class Session {
         }`
       );
 
-      // FIXED: Handle test messages more gracefully
+      // Handle test messages more gracefully
       if (this.isTestConnection(message)) {
         this.handleTestMessage(message);
         return;
@@ -239,7 +256,7 @@ export class Session {
         }
       }
 
-      // FIXED: More flexible ID validation
+      // More flexible ID validation
       if (message.id && message.id !== this.clientSessionId) {
         console.warn(
           `${new Date().toISOString()}:[Session] Session ID mismatch: expected ${
@@ -275,9 +292,9 @@ export class Session {
   }
 
   private isTestConnection(message: any): boolean {
-    // Test connections typically send simple ping messages without proper protocol structure
+    // Test connections typically send simple messages without proper protocol structure
     return (
-      message.type === "ping" &&
+      (message.type === "ping" || message.type === "test") &&
       (message.seq === undefined ||
         message.id === undefined ||
         message.serverseq === undefined)
@@ -285,8 +302,11 @@ export class Session {
   }
 
   private isProductionConnection(): boolean {
-    // Production connections have audiohook headers
-    return this.url.includes("audiohook") || this.conversationId !== undefined;
+    // Production connections have audiohook headers or conversation ID
+    return (
+      this.conversationId !== undefined ||
+      this.clientSessionId.includes("audiohook")
+    );
   }
 
   private handleTestMessage(message: any) {
@@ -296,12 +316,14 @@ export class Session {
       }`
     );
 
-    if (message.type === "ping") {
+    if (message.type === "ping" || message.type === "test") {
       // Send a simple test response
       const testResponse = {
         type: "pong",
         timestamp: new Date().toISOString(),
         status: "ok",
+        message:
+          "Test connection successful - waiting for Genesys 'open' message to start voice agent",
       };
 
       console.log(
@@ -576,6 +598,13 @@ export class Session {
       return;
     }
 
+    if (!this.voiceAIAgentClient) {
+      console.log(
+        `${new Date().toISOString()}:[Session] Ignoring audio - voice agent not initialized yet (waiting for 'open' message)`
+      );
+      return;
+    }
+
     console.log(
       `${new Date().toISOString()}:[Session] Processing CUSTOMER audio from Genesys: ${
         data.length
@@ -583,7 +612,7 @@ export class Session {
     );
 
     // Send customer audio TO UltraVox agent
-    this.voiceAIAgentClient?.processAudio(data);
+    this.voiceAIAgentClient.processAudio(data);
   }
 
   // DTMF processing

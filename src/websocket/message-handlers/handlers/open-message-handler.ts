@@ -58,19 +58,22 @@ export class OpenMessageHandler implements MessageHandler {
       session.setInputVariables(parsedMessage.parameters.inputVariables);
     }
 
-    // CRITICAL: Send "opened" response back to Genesys
+    // STEP 1: Send "opened" response back to Genesys FIRST
     if (selectedMedia) {
       const response: ServerMessage = session.createMessage("opened", {
         media: [selectedMedia],
       });
 
       console.log(
-        `${new Date().toISOString()}:[OpenHandler] Sending opened response to Genesys`
+        `${new Date().toISOString()}:[OpenHandler] Sending 'opened' response to Genesys`
       );
       session.send(response);
 
-      // The UltraVox agent will be initialized in the Session constructor
-      // and will automatically start the conversation
+      // STEP 2: ONLY NOW initialize UltraVox after successful Genesys handshake
+      console.log(
+        `${new Date().toISOString()}:[OpenHandler] Genesys handshake complete - now initializing UltraVox`
+      );
+      session.initializeVoiceAgent();
     }
   }
 }
