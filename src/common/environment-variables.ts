@@ -1,4 +1,4 @@
-const DEFAULT_PORT = 8080;
+const DEFAULT_PORT = 5000;
 
 export function getPort(): number {
   const envPort: string | undefined = process.env.PORT;
