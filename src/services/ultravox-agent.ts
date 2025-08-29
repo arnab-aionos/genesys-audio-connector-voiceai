@@ -8,7 +8,7 @@ const ULTRAVOX_API_KEY = process.env.ULTRAVOX_API_KEY || "";
 const ULTRAVOX_CALL_API =
   process.env.ULTRAVOX_CALL_API || "https://api.ultravox.ai/v1/calls";
 
-// CRITICAL: Audio format configuration based on official docs
+//  Audio format configuration based on official docs
 const GENESYS_SAMPLE_RATE = 8000; // Genesys PCMU
 const ULTRAVOX_SAMPLE_RATE = 48000; // UltraVox requirement from docs
 const AUDIO_FRAME_SIZE_MS = 20; // 20ms frames as required
@@ -22,7 +22,8 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   private isInitializing: boolean = false;
   private audioStreamingTask: NodeJS.Timeout | null = null;
   private audioBuffer: Int16Array = new Int16Array(0);
-  private lastAudioSentTime = 0;
+  private lastAudioSendTime = 0;
+  private readonly MIN_SEND_INTERVAL = 50;
 
   constructor(session: Session) {
     super(
@@ -44,7 +45,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       todayDate
     );
 
-    // FIXED: Correct configuration based on official docs
+    //  Correct configuration based on official docs
     const callConfig = {
       systemPrompt: systemPrompt,
       model: process.env.ULTRAVOX_MODEL || "fixie-ai/ultravox",
@@ -91,7 +92,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
 
       this.ultraVoxWs = new WebSocket(joinUrl);
 
-      // CRITICAL: Set binary type for audio data
+      //  Set binary type for audio data
       this.ultraVoxWs.binaryType = "arraybuffer";
 
       const timeout = setTimeout(() => {
@@ -125,7 +126,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     });
   }
 
-  // CRITICAL: Implement continuous audio streaming as required by UltraVox
+  //  Implement continuous audio streaming as required by UltraVox
   private startContinuousAudioStreaming(): void {
     if (this.audioStreamingTask) {
       clearInterval(this.audioStreamingTask);
@@ -175,9 +176,16 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     this.ultraVoxWs?.send(audioData);
   }
 
-  // FIXED: Process incoming customer audio correctly
+  //  Process incoming customer audio correctly
   async processAudio(audioPayload: Uint8Array): Promise<void> {
     if (!this.isAgentConnected()) return;
+
+    // Add rate limiting check
+    const now = Date.now();
+    if (now - this.lastAudioSendTime < this.MIN_SEND_INTERVAL) {
+      return; // Skip this frame to prevent rate limiting
+    }
+    this.lastAudioSendTime = now;
 
     console.log(
       `${getISTTime()}:[UltraVox] Processing customer audio: ${
@@ -185,17 +193,14 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       } bytes`
     );
 
-    // STEP 1: Convert PCMU (μ-law) to linear PCM
+    // Keep your existing audio processing code
     const pcmSamples = this.convertPCMUToPCMSamples(audioPayload);
-
-    // STEP 2: Resample from 8kHz to 48kHz (critical!)
     const resampledSamples = this.resampleAudio(
       pcmSamples,
       GENESYS_SAMPLE_RATE,
       ULTRAVOX_SAMPLE_RATE
     );
 
-    // STEP 3: Add to buffer for continuous streaming
     const newBuffer = new Int16Array(
       this.audioBuffer.length + resampledSamples.length
     );
@@ -213,7 +218,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
   private handleUltraVoxMessage(data: any): void {
     try {
       if (data instanceof ArrayBuffer) {
-        // FIXED: Handle binary audio data from UltraVox
+        // Handle binary audio data from UltraVox
         const audioData = new Int16Array(data);
         console.log(
           `${getISTTime()}:[UltraVox] Received agent audio: ${
@@ -241,6 +246,20 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
       console.log(`${getISTTime()}:[UltraVox] Message: ${message.type}`);
 
       switch (message.type) {
+        case "call_started":
+          console.log(`${getISTTime()}:[UltraVox] Call started successfully`);
+          break;
+
+        case "state":
+          console.log(
+            `${getISTTime()}:[UltraVox] State update:`,
+            message.state
+          );
+          break;
+
+        case "pong":
+          break;
+
         case "transcript":
           if (message.text) {
             this.session.sendTranscript(
@@ -285,7 +304,7 @@ export class UltraVoxAgent extends VoiceAIAgentBaseClass {
     }
   }
 
-  // CRITICAL: Proper sample rate conversion
+  //  Proper sample rate conversion
   private resampleAudio(
     input: Int16Array,
     inputSampleRate: number,

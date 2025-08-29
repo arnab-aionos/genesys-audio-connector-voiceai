@@ -55,6 +55,9 @@ export class Session {
   private isAudioPlaying = false;
   private buffer: Array<Uint8Array> = new Array<Uint8Array>();
 
+  private lastAudioSendTime = 0;
+  private readonly MIN_SEND_INTERVAL = 50; // ms
+
   constructor(
     ws: WebSocket,
     sessionId: string | undefined,
@@ -372,6 +375,12 @@ export class Session {
       );
       return;
     }
+
+    const now = Date.now();
+    if (now - this.lastAudioSendTime < this.MIN_SEND_INTERVAL) {
+      return;
+    }
+    this.lastAudioSendTime = now;
 
     this.buffer.push(currBytes);
     const totalLength =
